@@ -1,6 +1,6 @@
 # Voice Audit Agent - 100ms
 
-FastAPI server for voice audit agent with 100ms integration.
+FastAPI server for voice audit agent [100ms Project].
 
 ## Setup
 
