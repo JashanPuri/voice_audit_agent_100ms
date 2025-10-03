@@ -1,7 +1,8 @@
-from fastapi import APIRouter, File, UploadFile, Form, Depends
+from fastapi import APIRouter, File, UploadFile, Form, Depends, HTTPException
 from typing import Optional
 import json
 import logging
+from bson.objectid import ObjectId
 from src.transcript_audit.models import TranscriptAuditResult
 from src.transcript_audit.services.recorded_line_audit_service import (
     RecordedLineAuditService,
@@ -105,6 +106,9 @@ async def get_transcript_audits():
 
 @router.get("/transcript/audits/{transcript_audit_id}")
 async def get_transcript_audit(transcript_audit_id: str):
+    if not ObjectId.is_valid(transcript_audit_id):
+        raise HTTPException(status_code=400, detail="Invalid transcript audit id")
+    
     mongo_client = get_mongo_client()
     transcript_audit = await mongo_client.find_one(TranscriptAuditResult.collection_name(), {"_id": transcript_audit_id})
     return TranscriptAuditResult(**transcript_audit)
