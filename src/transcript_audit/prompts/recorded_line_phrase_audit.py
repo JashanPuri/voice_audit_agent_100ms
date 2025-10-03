@@ -130,7 +130,7 @@ Output format:
 - Always return a JSON object with two fields:
   {{
     "recorded_line_said": true/false,
-    "index": <index> of the message where the voice agent explicitly stated that the call is on a recorded line. Do not include if the voice agent did not explicitly state that the call is on a recorded line.
+    "index": <index> of the message where the voice agent introduced itself to the human staff and irrespective of whether it stated that the call is on a recorded line.
   }}
 
 Notes:

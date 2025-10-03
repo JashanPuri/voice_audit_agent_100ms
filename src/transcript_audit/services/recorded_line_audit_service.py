@@ -120,7 +120,7 @@ Please return whether the voice agent explicitly stated that the call is on a re
                         },
                         "index": {
                             "type": "integer",
-                            "description": "The value of the <index> tag of the message where the voice agent explicitly stated that the call is on a recorded line. Do not include if the voice agent did not state that the call is on a recorded line.",
+                            "description": "The value of the <index> tag of the message where the voice agent introduced itself to the human staff and irrespective of whether it stated that the call is on a recorded line.",
                         },
                     },
                     "required": ["has_recorded_line_phrase", "index"],
@@ -152,12 +152,8 @@ Please return whether the voice agent explicitly stated that the call is on a re
 
             audit_results[transfer_index] = {
                 "has_recorded_line_phrase": result["has_recorded_line_phrase"],
+                "recorded_line_phrase_index": result["index"],
             }
-
-            if result["has_recorded_line_phrase"] is True:
-                audit_results[transfer_index]["recorded_line_phrase_index"] = result[
-                    "index"
-                ]
 
         return audit_results
 
@@ -182,22 +178,19 @@ Please return whether the voice agent explicitly stated that the call is on a re
         audit_results: dict[int, dict] = {}
 
         for index, result in recorded_line_phrases.items():
-            human_transfer_message = conversation[index]
-            recorded_line_phrase_message = None
+            recorded_line_phrase_index: int = result["recorded_line_phrase_index"]
 
-            if result["has_recorded_line_phrase"] is True:
-                recorded_line_phrase_message = conversation[
-                    result["recorded_line_phrase_index"]
-                ]
+            human_transfer_message: TranscriptMessage = conversation[index]
+            recorded_line_phrase_message: TranscriptMessage = conversation[
+                recorded_line_phrase_index
+            ]
 
             audit_results[human_transfer_message.id] = {
-                "human_transfer_message_id": human_transfer_message.id,
                 "has_recorded_line_phrase": result["has_recorded_line_phrase"],
-                "recorded_line_phrase_message_id": (
-                    recorded_line_phrase_message.id
-                    if recorded_line_phrase_message is not None
-                    else None
-                ),
+                "human_transfer_message_id": human_transfer_message.id,
+                "human_transfer_message_content": human_transfer_message.content,
+                "recorded_line_phrase_message_id": recorded_line_phrase_message.id,
+                "recorded_line_phrase_message_content": recorded_line_phrase_message.content,
             }
 
         return audit_results
