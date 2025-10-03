@@ -65,13 +65,12 @@ async def audit_transcript(
                 )
             )
 
-        response = {}
-
         # Note: Storing it initially to make it avaialble for workflows running as workers via the task queues
         transcript_audit_result = TranscriptAuditResult(
             transcript_file_name=transcript_file.filename,
             audit_types=audit_types,
             conversation_history=conversation,
+            status={audit_type: AuditStatus.PENDING for audit_type in audit_types},
         )
 
         transcript_audit_result_id = await mongo_client.insert_one(
@@ -79,23 +78,20 @@ async def audit_transcript(
             document=transcript_audit_result.to_mongo(),
         )
 
+        transcript_audit_result.id = transcript_audit_result_id
+
         logger.info(f"[audit_transcript] Transcript audit result id: {transcript_audit_result_id}")
 
         # TODO: Make the audit workflows async by using task queues
         if AuditType.RECORDED_LINE_PHRASES in audit_types:
-            response["recorded_line_phrases"] = await recorded_line_audit_service.audit(
+            await recorded_line_audit_service.audit(
                 transcript_audit_result_id, f"{agent_first_name} {agent_last_name}"
             )
 
     except json.JSONDecodeError as e:
         return {"error": "Invalid JSON file", "message": str(e)}
 
-    return {
-        "message": "Transcript audited successfully",
-        "file_name": transcript_file.filename,
-        "audit_types": audit_types,
-        "audit_results": response,
-    }
+    return transcript_audit_result
 
 
 # TODO: Add pagination

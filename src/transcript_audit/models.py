@@ -9,7 +9,7 @@ class TranscriptAuditResult(BaseModel):
     transcript_file_name: str
     audit_types: List[AuditType] = Field(default_factory=list)
     conversation_history: List[TranscriptMessage] = Field(default_factory=list)
-    status: AuditStatus = Field(default=AuditStatus.PENDING)
+    status: Dict[AuditType, AuditStatus] = Field(default_factory=dict)
     audit_results: Optional[Dict[AuditType, Any]] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     

@@ -3,7 +3,7 @@ import logging
 import json
 import asyncio
 from bson.objectid import ObjectId
-from src.transcript_audit.schemas import TranscriptMessage
+from src.transcript_audit.schemas import TranscriptMessage, AuditStatus
 from src.transcript_audit.util import convert_transcript_message_to_xml
 from src.openai_client.client import OpenAIClient
 from src.transcript_audit.prompts.recorded_line_phrase_audit import (
@@ -162,69 +162,89 @@ Please return whether the voice agent explicitly stated that the call is on a re
         return audit_results
 
     async def audit(self, transcript_audit_result_id: str, agent_name: str):
-        mongo_client = get_mongo_client()
-        transcript_audit_result_document = await mongo_client.find_one(
-            TranscriptAuditResult.collection_name(),
-            {"_id": ObjectId(transcript_audit_result_id)}
-        )
+        try:
+            mongo_client = get_mongo_client()
+            transcript_audit_result_document = await mongo_client.find_one(
+                TranscriptAuditResult.collection_name(),
+                {"_id": ObjectId(transcript_audit_result_id)},
+            )
 
-        if not transcript_audit_result_document:
-            raise ValueError(f"Transcript audit result with id {transcript_audit_result_id} not found")
+            if not transcript_audit_result_document:
+                raise ValueError(
+                    f"Transcript audit result with id {transcript_audit_result_id} not found"
+                )
 
-        transcript_audit_result = TranscriptAuditResult(**transcript_audit_result_document)
+            transcript_audit_result = TranscriptAuditResult(
+                **transcript_audit_result_document
+            )
 
-        conversation = transcript_audit_result.conversation_history
+            conversation = transcript_audit_result.conversation_history
 
-        logger.info("[RecordedLineAuditService.audit] Starting audit")
-        human_transfer_indices: list[int] = await self._get_human_agent_transfers(
-            conversation
-        )
-        logger.info(
-            f"[RecordedLineAuditService.audit] Human transfer indices: {human_transfer_indices}"
-        )
-
-        for index in human_transfer_indices:
+            logger.info("[RecordedLineAuditService.audit] Starting audit")
+            human_transfer_indices: list[int] = await self._get_human_agent_transfers(
+                conversation
+            )
             logger.info(
-                f"[RecordedLineAuditService.audit] Message at index {index} => {conversation[index].role}: {conversation[index].content}"
+                f"[RecordedLineAuditService.audit] Human transfer indices: {human_transfer_indices}"
             )
 
-        recorded_line_phrases = await self._get_recorded_line_phrases(
-            conversation, human_transfer_indices, agent_name
-        )
+            for index in human_transfer_indices:
+                logger.info(
+                    f"[RecordedLineAuditService.audit] Message at index {index} => {conversation[index].role}: {conversation[index].content}"
+                )
 
-        recorded_lines_audit: dict[str, Any] = {
-            "total_human_transfers": len(human_transfer_indices),
-            "total_recorded_line_phrases": 0,
-            "auditted_chunks": [],
-        }
-
-        for index, phrase_result in recorded_line_phrases.items():
-            recorded_line_phrase_index: int = phrase_result["recorded_line_phrase_index"]
-
-            human_transfer_message: TranscriptMessage = conversation[index]
-            recorded_line_phrase_message: TranscriptMessage = conversation[
-                recorded_line_phrase_index
-            ]
-
-            if phrase_result["has_recorded_line_phrase"]:
-                recorded_lines_audit["total_recorded_line_phrases"] += 1
-
-            recorded_lines_audit["auditted_chunks"].append(
-                {
-                    "has_recorded_line_phrase": phrase_result["has_recorded_line_phrase"],
-                    "human_transfer_message_id": human_transfer_message.id,
-                    "human_transfer_message_content": human_transfer_message.content,
-                    "recorded_line_phrase_message_id": recorded_line_phrase_message.id,
-                    "recorded_line_phrase_message_content": recorded_line_phrase_message.content,
-                }
+            recorded_line_phrases = await self._get_recorded_line_phrases(
+                conversation, human_transfer_indices, agent_name
             )
-        
-        logger.info(f"Saving audit results to database for transcript audit result id: {transcript_audit_result_id}")
 
-        await mongo_client.update_one(
-            TranscriptAuditResult.collection_name(),
-            {"_id": ObjectId(transcript_audit_result_id)},
-            {"$set": {"audit_results.recorded_line_phrases": recorded_lines_audit}}
-        )
+            recorded_lines_audit: dict[str, Any] = {
+                "total_human_transfers": len(human_transfer_indices),
+                "total_recorded_line_phrases": 0,
+                "auditted_chunks": [],
+            }
 
-        return recorded_lines_audit
+            for index, phrase_result in recorded_line_phrases.items():
+                recorded_line_phrase_index: int = phrase_result[
+                    "recorded_line_phrase_index"
+                ]
+
+                human_transfer_message: TranscriptMessage = conversation[index]
+                recorded_line_phrase_message: TranscriptMessage = conversation[
+                    recorded_line_phrase_index
+                ]
+
+                if phrase_result["has_recorded_line_phrase"]:
+                    recorded_lines_audit["total_recorded_line_phrases"] += 1
+
+                recorded_lines_audit["auditted_chunks"].append(
+                    {
+                        "has_recorded_line_phrase": phrase_result[
+                            "has_recorded_line_phrase"
+                        ],
+                        "human_transfer_message_id": human_transfer_message.id,
+                        "human_transfer_message_content": human_transfer_message.content,
+                        "recorded_line_phrase_message_id": recorded_line_phrase_message.id,
+                        "recorded_line_phrase_message_content": recorded_line_phrase_message.content,
+                    }
+                )
+
+            logger.info(
+                f"Saving audit results to database for transcript audit result id: {transcript_audit_result_id}"
+            )
+
+            await mongo_client.update_one(
+                TranscriptAuditResult.collection_name(),
+                {"_id": ObjectId(transcript_audit_result_id)},
+                {"$set": {"audit_results.recorded_line_phrases": recorded_lines_audit, "status.recorded_line_phrases": AuditStatus.COMPLETED}},
+            )
+            logger.info(f"Audit results saved to database for transcript audit result id: {transcript_audit_result_id}")
+
+            return recorded_lines_audit
+        except Exception as e:
+            await mongo_client.update_one(
+                TranscriptAuditResult.collection_name(),
+                {"_id": ObjectId(transcript_audit_result_id)},
+                {"$set": {"status.recorded_line_phrases": AuditStatus.FAILED}},
+            )
+            logger.error(f"[RecordedLineAuditService.audit] Error: {e}")
+            raise e
