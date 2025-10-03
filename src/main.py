@@ -1,8 +1,10 @@
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from src.transcript_audit.router import router as transcript_router
 import logging
+from src.mongo_db import init_mongo_db, close_mongo_db
 
 load_dotenv()
 
@@ -16,10 +18,19 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Initializing MongoDB client")
+    await init_mongo_db()
+    yield
+
+
+
 app = FastAPI(
     title="Voice Audit Agent API",
     description="FastAPI server for voice audit agent with 100ms",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 app.add_middleware(
