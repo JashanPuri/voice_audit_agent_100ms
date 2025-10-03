@@ -34,24 +34,16 @@ async def audit_transcript(
 
         json_content: dict = json.loads(content)
 
-        conversation_history = (
-            json_content.get("data", {})
-            .get("context", {})
-            .get("variables", {})
-            .get("review_conversation_history", [])
-        )
-        agent_first_name = (
-            json_content.get("data", {})
-            .get("context", {})
-            .get("variables", {})
-            .get("agent_first_name", "")
-        )
-        agent_last_name = (
-            json_content.get("data", {})
-            .get("context", {})
-            .get("variables", {})
-            .get("agent_last_name", "")
-        )
+        context = json_content.get("data", {}).get("context", {})
+        variables = context.get("variables", {})
+        user_data = context.get("user_data", {})
+
+        conversation_history = variables.get("review_conversation_history", [])
+        agent_first_name = variables.get("agent_first_name", "")
+        agent_last_name = variables.get("agent_last_name", "")
+
+        org_id = user_data.get("org_id", "")
+        session_id = user_data.get("session_id", "")
 
         logger.info(
             f"[audit_transcript] Conversation history: {len(conversation_history)}"
@@ -68,6 +60,8 @@ async def audit_transcript(
 
         # Note: Storing it initially to make it avaialble for workflows running as workers via the task queues
         transcript_audit_result = TranscriptAuditResult(
+            org_id=org_id,
+            session_id=session_id,
             transcript_file_name=transcript_file.filename,
             audit_types=audit_types,
             conversation_history=conversation,
@@ -81,7 +75,9 @@ async def audit_transcript(
 
         transcript_audit_result.id = transcript_audit_result_id
 
-        logger.info(f"[audit_transcript] Transcript audit result id: {transcript_audit_result_id}")
+        logger.info(
+            f"[audit_transcript] Transcript audit result id: {transcript_audit_result_id}"
+        )
 
         # TODO: Make the audit workflows async by using task queues
         if AuditType.RECORDED_LINE_PHRASES in audit_types:
@@ -99,16 +95,22 @@ async def audit_transcript(
 @router.get("/transcript/audits")
 async def get_transcript_audits():
     mongo_client = get_mongo_client()
-    transcript_audits = await mongo_client.find_many(TranscriptAuditResult.collection_name(), {})
+    transcript_audits = await mongo_client.find_many(
+        TranscriptAuditResult.collection_name(), {}
+    )
     return [
-        TranscriptAuditResult(**transcript_audit) for transcript_audit in transcript_audits
+        TranscriptAuditResult(**transcript_audit)
+        for transcript_audit in transcript_audits
     ]
+
 
 @router.get("/transcript/audits/{transcript_audit_id}")
 async def get_transcript_audit(transcript_audit_id: str):
     if not ObjectId.is_valid(transcript_audit_id):
         raise HTTPException(status_code=400, detail="Invalid transcript audit id")
-    
+
     mongo_client = get_mongo_client()
-    transcript_audit = await mongo_client.find_one(TranscriptAuditResult.collection_name(), {"_id": transcript_audit_id})
+    transcript_audit = await mongo_client.find_one(
+        TranscriptAuditResult.collection_name(), {"_id": transcript_audit_id}
+    )
     return TranscriptAuditResult(**transcript_audit)

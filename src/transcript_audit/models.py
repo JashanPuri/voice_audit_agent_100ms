@@ -6,6 +6,8 @@ from src.transcript_audit.schemas import TranscriptMessage
 
 class TranscriptAuditResult(BaseModel):
     id: Optional[str] = Field(None, alias="_id")
+    org_id: str
+    session_id: str
     transcript_file_name: str
     audit_types: List[AuditType] = Field(default_factory=list)
     conversation_history: List[TranscriptMessage] = Field(default_factory=list)
