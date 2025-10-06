@@ -9,6 +9,7 @@ from src.transcript_audit.services.recorded_line_audit_service import (
 )
 from src.transcript_audit.schemas import AuditStatus, TranscriptMessage, AuditType
 from src.mongo_db import get_mongo_client
+from src.transcript_audit.services.section_audit_service import SectionAuditService
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ async def audit_transcript(
     recorded_line_audit_service: RecordedLineAuditService = Depends(
         RecordedLineAuditService
     ),
+    section_audit_service: SectionAuditService = Depends(SectionAuditService),
 ):
     try:
         mongo_client = get_mongo_client()
@@ -82,6 +84,11 @@ async def audit_transcript(
         # TODO: Make the audit workflows async by using task queues
         if AuditType.RECORDED_LINE_PHRASES in audit_types:
             await recorded_line_audit_service.audit(
+                transcript_audit_result_id, f"{agent_first_name} {agent_last_name}"
+            )
+
+        if AuditType.SECTION_BREAKDOWN in audit_types:
+            await section_audit_service.audit(
                 transcript_audit_result_id, f"{agent_first_name} {agent_last_name}"
             )
 

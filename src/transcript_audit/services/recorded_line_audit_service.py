@@ -107,10 +107,6 @@ Here is the conversation chunk:
 Please return whether the voice agent explicitly stated that the call is on a recorded line when introducing itself to a human agent.
 """
 
-            logger.info(
-                f"[RecordedLineAuditService._get_recorded_line_phrases] User prompt for transfer {transfer_index}: {conversation[transfer_index].content}"
-            )
-
             response_format = {
                 "type": "json_schema",
                 "name": "recorded_line_detection",
@@ -140,18 +136,11 @@ Please return whether the voice agent explicitly stated that the call is on a re
             tasks.append(task)
             transfer_indices_order.append(transfer_index)
 
-        logger.info(
-            f"[RecordedLineAuditService._get_recorded_line_phrases] Executing {len(tasks)} API calls concurrently"
-        )
         responses = await asyncio.gather(*tasks)
 
         audit_results: dict[int, dict] = {}
 
         for transfer_index, response in zip(transfer_indices_order, responses):
-            logger.info(
-                f"[RecordedLineAuditService._get_recorded_line_phrases] Result for transfer {transfer_index}: {response}"
-            )
-
             result: dict = json.loads(response)
 
             audit_results[transfer_index] = {
@@ -187,11 +176,6 @@ Please return whether the voice agent explicitly stated that the call is on a re
             logger.info(
                 f"[RecordedLineAuditService.audit] Human transfer indices: {human_transfer_indices}"
             )
-
-            for index in human_transfer_indices:
-                logger.info(
-                    f"[RecordedLineAuditService.audit] Message at index {index} => {conversation[index].role}: {conversation[index].content}"
-                )
 
             recorded_line_phrases = await self._get_recorded_line_phrases(
                 conversation, human_transfer_indices, agent_name
