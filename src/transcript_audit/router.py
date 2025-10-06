@@ -20,7 +20,7 @@ router = APIRouter()
 @router.post("/transcript/audits")
 async def audit_transcript(
     transcript_file: UploadFile = File(
-        ..., description="JSON file containing transcript data"
+        ..., description="JSON or NDJSON file containing transcript data"
     ),
     audit_types: list[AuditType] = Form(
         ..., description="List of audit types to perform"
@@ -35,7 +35,26 @@ async def audit_transcript(
 
         content = await transcript_file.read()
 
-        json_content: dict = json.loads(content)
+        try:
+            json_content: dict = json.loads(content)
+        except json.JSONDecodeError:
+            text_content = content.decode('utf-8')
+            lines = text_content.strip().split('\n')
+
+            last_json_object = None
+            for line in reversed(lines):
+                line = line.strip()
+                if line:
+                    try:
+                        last_json_object = json.loads(line)
+                        break
+                    except json.JSONDecodeError:
+                        continue
+            
+            if last_json_object is None:
+                raise ValueError("No valid JSON object found in NDJSON file")
+            
+            json_content = last_json_object
 
         context = json_content.get("data", {}).get("context", {})
         variables = context.get("variables", {})
@@ -104,6 +123,8 @@ async def audit_transcript(
 
     except json.JSONDecodeError as e:
         return {"error": "Invalid JSON file", "message": str(e)}
+    except ValueError as e:
+        return {"error": "Invalid file format", "message": str(e)}
 
     return transcript_audit_result
 
