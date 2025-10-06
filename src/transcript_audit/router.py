@@ -2,6 +2,7 @@ from fastapi import APIRouter, File, UploadFile, Form, Depends, HTTPException
 from typing import Optional
 import json
 import logging
+import asyncio
 from bson.objectid import ObjectId
 from src.transcript_audit.models import TranscriptAuditResult
 from src.transcript_audit.services.recorded_line_audit_service import (
@@ -81,16 +82,25 @@ async def audit_transcript(
             f"[audit_transcript] Transcript audit result id: {transcript_audit_result_id}"
         )
 
-        # TODO: Make the audit workflows async by using task queues
+        # Run audit workflows concurrently
+        audit_tasks = []
+        
         if AuditType.RECORDED_LINE_PHRASES in audit_types:
-            await recorded_line_audit_service.audit(
-                transcript_audit_result_id, f"{agent_first_name} {agent_last_name}"
+            audit_tasks.append(
+                recorded_line_audit_service.audit(
+                    transcript_audit_result_id, f"{agent_first_name} {agent_last_name}"
+                )
             )
 
         if AuditType.SECTION_BREAKDOWN in audit_types:
-            await section_audit_service.audit(
-                transcript_audit_result_id, f"{agent_first_name} {agent_last_name}"
+            audit_tasks.append(
+                section_audit_service.audit(
+                    transcript_audit_result_id, f"{agent_first_name} {agent_last_name}"
+                )
             )
+        
+        if audit_tasks:
+            await asyncio.gather(*audit_tasks)
 
     except json.JSONDecodeError as e:
         return {"error": "Invalid JSON file", "message": str(e)}
